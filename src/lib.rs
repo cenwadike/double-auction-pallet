@@ -1,3 +1,10 @@
+//! # Auction
+//!
+//! ## Overview
+//!
+//! This module provides a basic implement for order-book style on-chain double auctioning
+//! feature.
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 /// Edit this file to define custom logic or remove it if it is not needed.
