@@ -2,8 +2,45 @@
 //!
 //! ## Overview
 //!
-//! This module provides a basic implement for order-book style on-chain double auctioning
-//! feature.
+//! This module provides a basic implement for order-book style on-chain double auctioning.
+//!
+//! This is the matching layer of a decentralized marketplace for electrical energy.
+//! Sellers are categorized based on how much electricity they intend to sell.
+//! Buyers are also categorized based on how much electricity they intend to buy.
+//!
+//! The highest bidding buyer in the same category with a seller is matched
+//!  when the auction period of a seller is over.
+//!
+//! The seller has the benefit of getting the best price at a given point in time for their category,
+//! while the buyer can choose a margin of safety for every buy.
+//!
+//! NOTE: this mocdule does not implement how payment is handled.
+//!
+//! `Data`:     
+//!     --  AuctionData {
+//!             seller_id: AccountId,
+//!             quantity: u128,
+//!             starting_bid: u128,
+//!             buyers: [], // sorted array of bidders according to bid. Highest bidder at the top of the array.
+//!             auction_period: Blockheight,
+//!             start_at: Blockheight,
+//!             ended_at: Blockheight,
+//!         }
+//!     -- Tier: u128,  // 0, 1, 2, ...
+//!     -- Auctions {map(hash(AuctionData + Salt) -> (AuctionData, AuctionCategory, Tier)}
+//!
+//! `Interface`:
+//!     -- create_auction(...)
+//!     -- bid_on_auction(...)
+//!     -- destroy_auction(...)
+//!
+//! `Hooks`:
+//!     -- on_auctions_created
+//!     -- on_auction_destroyed
+//!     -- on_bid_auction
+//!     -- on_auction_over
+//!
+//! `RPC`: Data RPCs
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -18,18 +55,21 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
-// #[cfg(feature = "runtime-benchmarks")]
-// mod benchmarking;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
 // pub mod weights;
 // pub use weights::*;
 
 #[frame_support::pallet]
 pub mod pallet {
+
     use super::*;
-    use frame_support::pallet_prelude::*;
+    use frame_support::inherent::Vec;
+    use frame_support::{pallet_prelude::*, Twox64Concat};
     use frame_system::pallet_prelude::*;
 
     #[pallet::pallet]
+    #[pallet::without_storage_info]
     pub struct Pallet<T>(_);
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
@@ -41,75 +81,131 @@ pub mod pallet {
         // type WeightInfo: WeightInfo;
     }
 
-    // The pallet's runtime storage items.
-    // https://docs.substrate.io/main-docs/build/runtime-storage/
-    #[pallet::storage]
-    #[pallet::getter(fn something)]
-    // Learn more about declaring storage items:
-    // https://docs.substrate.io/main-docs/build/runtime-storage/#declaring-storage-items
-    pub type Something<T> = StorageValue<_, u32>;
+    //////////////////////
+    // Storage types   //
+    /////////////////////
 
-    // Pallets use events to inform users when important changes are made.
-    // https://docs.substrate.io/main-docs/build/events-errors/
+    // Buyers bid
+    #[derive(Clone, Encode, Decode, Default, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+    pub struct Bid<AccountId> {
+        buyer_id: AccountId,
+        bid: u128,
+    }
+
+    // Status of an auction, live auctions accepts bids
+    #[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+    pub enum AuctionStatus {
+        Alive,
+        Dead,
+    }
+    impl Default for AuctionStatus {
+        fn default() -> Self {
+            AuctionStatus::Alive
+        }
+    }
+
+    // Essential data for an auction
+    #[derive(Clone, Encode, Decode, Default, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+    pub struct AuctionData<AccountId, BlockNumber, Bid, Tier> {
+        pub seller_id: AccountId,
+        pub quantity: u128,
+        pub starting_bid: u128,
+        bids: Vec<Bid>,
+        auction_period: BlockNumber,
+        auction_status: AuctionStatus,
+        start_at: BlockNumber,
+        ended_at: BlockNumber,
+        highest_bid: Bid,
+        auction_category: Tier,
+    }
+
+    // Tier of an auction sale
+    // Higher quantity of energy for sale leads to higher tier
+    #[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+    pub struct Tier {
+        pub level: u32,
+    }
+    impl Default for Tier {
+        fn default() -> Self {
+            Tier { level: 1 }
+        }
+    }
+
+    //////////////////////
+    // Storage item    //
+    /////////////////////
+    #[pallet::storage]
+    #[pallet::getter(fn get_auction)]
+    pub(super) type Auctions<T: Config> = StorageMap<
+        _,
+        Twox64Concat,
+        T::Hash,
+        AuctionData<T::AccountId, T::BlockNumber, Bid<T::AccountId>, Tier>,
+        OptionQuery,
+    >;
+
+    //////////////////////
+    // Runtime events  //
+    /////////////////////
+    // runtime event for important runtime actions
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// Event documentation should end with an array that provides descriptive names for event
-        /// parameters. [something, who]
-        SomethingStored { something: u32, who: T::AccountId },
+        AuctionCreated {
+            seller: T::AccountId,
+            energy_quantity: u128,
+            starting_price: u128,
+        },
+
+        AuctionMatched {
+            seller: T::AccountId,
+            buyer: T::AccountId,
+            energy_quantity: u128,
+            starting_price: u128,
+            highest_bid: u128,
+            matched_at: T::BlockNumber,
+        },
+
+        AuctionExecuted {
+            seller: T::AccountId,
+            buyer: T::AccountId,
+            energy_quantity: u128,
+            starting_price: u128,
+            highest_bid: u128,
+            executed_at: T::BlockNumber,
+        },
+
+        AuctionDestroyed {
+            seller: T::AccountId,
+            energy_quantity: u128,
+            starting_price: u128,
+        },
     }
 
+    //////////////////////
+    // Pallet errors   //
+    /////////////////////
     // Errors inform users that something went wrong.
     #[pallet::error]
     pub enum Error<T> {
-        /// Error names should be descriptive.
-        NoneValue,
-        /// Errors should have helpful documentation associated with them.
-        StorageOverflow,
+        AuctionDoesNotExist,
+
+        AuctionIsOver,
+
+        UnAuthorizedCall,
+
+        InsuffficientAttachedDeposit,
     }
 
-    // Dispatchable functions allows users to interact with the pallet and invoke state changes.
-    // These functions materialize as "extrinsics", which are often compared to transactions.
-    // Dispatchable functions must be annotated with a weight and must return a DispatchResult.
+    ///////////////////////////
+    // Pallet extrinsics    //
+    //////////////////////////
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// An example dispatchable that takes a singles value as a parameter, writes the value to
-        /// storage and emits an event. This function must be dispatched by a signed extrinsic.
         #[pallet::call_index(0)]
         #[pallet::weight(100_000_000)]
-        pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
-            // Check that the extrinsic was signed and get the signer.
-            // This function will return an error if the extrinsic is not signed.
-            // https://docs.substrate.io/main-docs/build/origins/
-            let who = ensure_signed(origin)?;
-
-            // Update storage.
-            <Something<T>>::put(something);
-
-            // Emit an event.
-            Self::deposit_event(Event::SomethingStored { something, who });
-            // Return a successful DispatchResultWithPostInfo
+        pub fn create_auction(_origin: OriginFor<T>) -> DispatchResult {
             Ok(())
-        }
-
-        /// An example dispatchable that may throw a custom error.
-        #[pallet::call_index(1)]
-        #[pallet::weight(100_000_000)]
-        pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
-            let _who = ensure_signed(origin)?;
-
-            // Read a value from storage.
-            match <Something<T>>::get() {
-                // Return an error if the value has not been set.
-                None => return Err(Error::<T>::NoneValue.into()),
-                Some(old) => {
-                    // Increment the value read from storage; will error in the event of overflow.
-                    let new = old.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
-                    // Update the value in storage with the incremented result.
-                    <Something<T>>::put(new);
-                    Ok(())
-                }
-            }
         }
     }
 }
