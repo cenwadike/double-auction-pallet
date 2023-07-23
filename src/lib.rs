@@ -1,4 +1,4 @@
-//! # Auction
+//! # Double Auction
 //!
 //! ## Overview
 //!
@@ -27,7 +27,7 @@
 //!             ended_at: Blockheight,
 //!         }
 //!     -- Tier: u128,  // 0, 1, 2, ...
-//!     -- Auctions {map(hash(AuctionData + Salt) -> (AuctionData, AuctionCategory, Tier)}
+//!     -- Auctions {map(hash(AuctionData + Salt)) -> (AuctionData, AuctionCategory, Tier)}
 //!
 //! `Interface`:
 //!     -- create_auction(...)
