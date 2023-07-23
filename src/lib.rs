@@ -31,8 +31,8 @@
 //!
 //! `Interface`:
 //!     -- create_auction(...)
-//!     -- bid_on_auction(...)
-//!     -- destroy_auction(...)
+//!     -- bid_auction(...)
+//!     -- cancel_auction(...)
 //!
 //! `Hooks`:
 //!     -- on_auctions_created
@@ -65,7 +65,8 @@ pub mod pallet {
 
     use super::*;
     use frame_support::inherent::Vec;
-    use frame_support::{pallet_prelude::*, Twox64Concat};
+    use frame_support::pallet_prelude::*;
+    use frame_support::sp_runtime::traits::Hash;
     use frame_system::pallet_prelude::*;
 
     #[pallet::pallet]
@@ -86,9 +87,9 @@ pub mod pallet {
     /////////////////////
 
     // Buyers bid
-    #[derive(Clone, Encode, Decode, Default, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+    #[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
     pub struct Bid<AccountId> {
-        buyer_id: AccountId,
+        bidder: AccountId,
         bid: u128,
     }
 
@@ -107,9 +108,11 @@ pub mod pallet {
     // Essential data for an auction
     #[derive(Clone, Encode, Decode, Default, Eq, PartialEq, RuntimeDebug, TypeInfo)]
     pub struct AuctionData<AccountId, BlockNumber, Bid, Tier> {
+        pub auction_id: u64,
         pub seller_id: AccountId,
         pub quantity: u128,
         pub starting_bid: u128,
+        pub memo: Vec<u8>,
         bids: Vec<Bid>,
         auction_period: BlockNumber,
         auction_status: AuctionStatus,
@@ -131,9 +134,46 @@ pub mod pallet {
         }
     }
 
+    #[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+    pub enum PartyType {
+        Seller,
+        Buyer,
+    }
+    impl Default for PartyType {
+        fn default() -> Self {
+            PartyType::Seller
+        }
+    }
+
+    // Auctions linked to an auction participant
+    // for quick data retrieval
+    #[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
+    pub struct AuctionsOf<AccountId, BlockNumber, Bid, Tier, PartyType> {
+        pub party: Option<AccountId>,
+        pub party_type: PartyType,
+        pub auctions: Vec<AuctionData<AccountId, BlockNumber, Bid, Tier>>, // Maximum length of 10
+    }
+
+    impl<AccountId, BlockNumber> Default
+        for AuctionsOf<AccountId, BlockNumber, Bid<AccountId>, Tier, PartyType>
+    {
+        fn default() -> Self {
+            AuctionsOf {
+                party: None,
+                party_type: PartyType::Seller,
+                auctions: vec![],
+            }
+        }
+    }
+
     //////////////////////
     // Storage item    //
     /////////////////////
+    #[pallet::storage]
+    #[pallet::getter(fn current_auction_id)]
+    pub(super) type AuctionId<T: Config> = StorageValue<_, u64>;
+
+    // live auctions
     #[pallet::storage]
     #[pallet::getter(fn get_auction)]
     pub(super) type Auctions<T: Config> = StorageMap<
@@ -141,6 +181,16 @@ pub mod pallet {
         Twox64Concat,
         T::Hash,
         AuctionData<T::AccountId, T::BlockNumber, Bid<T::AccountId>, Tier>,
+        OptionQuery,
+    >;
+
+    #[pallet::storage]
+    #[pallet::getter(fn get_auction_of)]
+    pub(super) type AuctionLookup<T: Config> = StorageMap<
+        _,
+        Twox64Concat,
+        T::AccountId,
+        AuctionsOf<T::AccountId, T::BlockNumber, Bid<T::AccountId>, Tier, PartyType>,
         OptionQuery,
     >;
 
@@ -155,6 +205,14 @@ pub mod pallet {
             seller: T::AccountId,
             energy_quantity: u128,
             starting_price: u128,
+            memo: Vec<u8>,
+        },
+
+        AuctionBidAdded {
+            seller: T::AccountId,
+            energy_quantity: u128,
+            bidder: T::AccountId,
+            bid: u128,
         },
 
         AuctionMatched {
@@ -175,10 +233,11 @@ pub mod pallet {
             executed_at: T::BlockNumber,
         },
 
-        AuctionDestroyed {
+        AuctionCanceled {
             seller: T::AccountId,
             energy_quantity: u128,
             starting_price: u128,
+            memo: Vec<u8>,
         },
     }
 
@@ -204,7 +263,163 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         #[pallet::call_index(0)]
         #[pallet::weight(100_000_000)]
-        pub fn create_auction(_origin: OriginFor<T>) -> DispatchResult {
+        pub fn create_auction(
+            origin: OriginFor<T>,
+            energy_quantity: u128, // in KWH
+            starting_price: u128,  // in parachain native token
+            auction_period: u16,   // in minutes
+            memo: Vec<u8>,         // additional info for indexing
+        ) -> DispatchResult {
+            // Check that the extrinsic was signed by seller or return error.
+            let seller = ensure_signed(origin)?;
+
+            // get current_auction_id
+            let current_auction_id = AuctionId::<T>::get().unwrap_or(1);
+
+            // Calculate auction period
+            // Convert minutes to seconds
+            // Divide by 6, assumming each time is 6 seconds
+            let auction_period_in_block_number = (auction_period.checked_mul(60).unwrap())
+                .checked_div(6)
+                .unwrap()
+                .into();
+
+            // Get current block number from the FRAME System pallet.
+            let starting_block_number = <frame_system::Pallet<T>>::block_number();
+
+            let ending_block_number = starting_block_number + auction_period_in_block_number;
+
+            let default_bid = Bid::<T::AccountId> {
+                bidder: seller.clone(),
+                bid: starting_price,
+            };
+
+            let category;
+            if energy_quantity < 5 {
+                category = Tier::default()
+            } else {
+                category = Tier { level: 2 }
+            }
+
+            let auction_data = AuctionData {
+                auction_id: current_auction_id,
+                seller_id: seller.clone(),
+                quantity: energy_quantity,
+                starting_bid: starting_price,
+                memo: memo.clone(),
+                bids: vec![],
+                auction_period: auction_period_in_block_number,
+                auction_status: AuctionStatus::default(),
+                start_at: starting_block_number,
+                ended_at: ending_block_number,
+                highest_bid: default_bid,
+                auction_category: category,
+            };
+
+            // get auction from lookup
+            let mut auctions_of_seller =
+                AuctionLookup::<T>::get(seller.clone()).unwrap_or_default();
+
+            // remove least current auction from lookup auctions if length > 10
+            if auctions_of_seller.auctions.len() > 10 {
+                auctions_of_seller.auctions.pop();
+            }
+
+            // Add seller's auctions to lookup map
+            let auction_of_seller = AuctionsOf {
+                party: Some(seller.clone()),
+                party_type: PartyType::Seller,
+                auctions: vec![auction_data.clone()],
+            };
+            AuctionLookup::<T>::insert(&seller, auction_of_seller);
+
+            // add auction to runtime storgae
+            let pre_image = format!("{:?}.{:?}", seller.clone().encode(), memo);
+            let auction_hash = T::Hashing::hash(pre_image.as_bytes());
+            Auctions::<T>::insert(&auction_hash, auction_data);
+
+            // update auction id
+            AuctionId::<T>::set(Some(current_auction_id + 1));
+
+            // Emit an event that the book was created.
+            Self::deposit_event(Event::AuctionCreated {
+                seller,
+                energy_quantity,
+                starting_price,
+                memo,
+            });
+
+            Ok(())
+        }
+
+        #[pallet::call_index(1)]
+        #[pallet::weight(100_000_000)]
+        pub fn cancel_auction(origin: OriginFor<T>, memo: Vec<u8>) -> DispatchResult {
+            // Check that the extrinsic was signed by seller or return error.
+            let seller = ensure_signed(origin)?;
+
+            // Get auction hash
+            let pre_image = format!("{:?}.{:?}", seller.clone().encode(), memo);
+            let auction_hash = T::Hashing::hash(pre_image.as_bytes());
+
+            // Check auction is exist
+            ensure!(
+                Auctions::<T>::contains_key(auction_hash),
+                Error::<T>::AuctionDoesNotExist
+            );
+
+            // Get auction
+            let mut auction_data = Auctions::<T>::get(auction_hash).unwrap();
+
+            // Check auction is live
+            ensure!(
+                matches!(auction_data.auction_status, AuctionStatus::Alive),
+                Error::<T>::AuctionIsOver
+            );
+
+            // get auction from lookup
+            let mut auctions_of_seller = AuctionLookup::<T>::get(seller.clone()).unwrap();
+
+            // check corresponding auction in lookup and update auction data
+            for (index, mut auction) in auctions_of_seller.auctions.clone().into_iter().enumerate()
+            {
+                // get matching auction(s)
+                if auction.memo == memo {
+                    auction.auction_status = AuctionStatus::Dead;
+                    auctions_of_seller.auctions.insert(index, auction);
+                }
+
+                // update runtime storage
+                AuctionLookup::<T>::insert(
+                    &seller,
+                    AuctionsOf {
+                        party: Some(seller.clone()),
+                        party_type: PartyType::Seller,
+                        auctions: auctions_of_seller.auctions.clone(),
+                    },
+                )
+            }
+
+            // Set auction as over
+            auction_data.auction_status = AuctionStatus::Dead;
+
+            // update auction in runtime storage
+            Auctions::<T>::insert(&auction_hash, auction_data.clone());
+
+            // Emit an event that the book was canceled.
+            Self::deposit_event(Event::AuctionCanceled {
+                seller: auction_data.seller_id,
+                energy_quantity: auction_data.quantity,
+                starting_price: auction_data.starting_bid,
+                memo: auction_data.memo,
+            });
+
+            Ok(())
+        }
+
+        #[pallet::call_index(2)]
+        #[pallet::weight(100_000_000)]
+        pub fn bid_auction(_origin: OriginFor<T>) -> DispatchResult {
             Ok(())
         }
     }
