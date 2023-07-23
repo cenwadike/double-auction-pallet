@@ -211,6 +211,7 @@ pub mod pallet {
         AuctionBidAdded {
             seller: T::AccountId,
             energy_quantity: u128,
+            memo: Vec<u8>,
             bidder: T::AccountId,
             bid: u128,
         },
@@ -255,6 +256,10 @@ pub mod pallet {
 
         InsuffficientAttachedDeposit,
     }
+
+    ///////////////////
+    // Pallet hooks //
+    //////////////////
 
     ///////////////////////////
     // Pallet extrinsics    //
@@ -325,11 +330,14 @@ pub mod pallet {
                 auctions_of_seller.auctions.pop();
             }
 
+            // update lookup auctions
+            auctions_of_seller.auctions.push(auction_data.clone());
+
             // Add seller's auctions to lookup map
             let auction_of_seller = AuctionsOf {
                 party: Some(seller.clone()),
                 party_type: PartyType::Seller,
-                auctions: vec![auction_data.clone()],
+                auctions: auctions_of_seller.auctions,
             };
             AuctionLookup::<T>::insert(&seller, auction_of_seller);
 
@@ -341,7 +349,7 @@ pub mod pallet {
             // update auction id
             AuctionId::<T>::set(Some(current_auction_id + 1));
 
-            // Emit an event that the book was created.
+            // Emit an event that the auction was created.
             Self::deposit_event(Event::AuctionCreated {
                 seller,
                 energy_quantity,
@@ -386,6 +394,7 @@ pub mod pallet {
                 // get matching auction(s)
                 if auction.memo == memo {
                     auction.auction_status = AuctionStatus::Dead;
+                    auctions_of_seller.auctions.remove(index);
                     auctions_of_seller.auctions.insert(index, auction);
                 }
 
@@ -406,7 +415,7 @@ pub mod pallet {
             // update auction in runtime storage
             Auctions::<T>::insert(&auction_hash, auction_data.clone());
 
-            // Emit an event that the book was canceled.
+            // Emit an event that the auction was canceled.
             Self::deposit_event(Event::AuctionCanceled {
                 seller: auction_data.seller_id,
                 energy_quantity: auction_data.quantity,
@@ -419,7 +428,99 @@ pub mod pallet {
 
         #[pallet::call_index(2)]
         #[pallet::weight(100_000_000)]
-        pub fn bid_auction(_origin: OriginFor<T>) -> DispatchResult {
+        pub fn bid_auction(
+            origin: OriginFor<T>,
+            seller_id: T::AccountId,
+            auction_memo: Vec<u8>,
+            bid: u128,
+        ) -> DispatchResult {
+            // Check that the extrinsic was signed by buyer or return error.
+            let buyer = ensure_signed(origin)?;
+
+            // Get auction hash
+            let pre_image = format!("{:?}.{:?}", seller_id.clone().encode(), auction_memo);
+            let auction_hash = T::Hashing::hash(pre_image.as_bytes());
+
+            // Check auction is exist
+            ensure!(
+                Auctions::<T>::contains_key(auction_hash),
+                Error::<T>::AuctionDoesNotExist
+            );
+
+            // Get auction data
+            let mut auction_data = Auctions::<T>::get(auction_hash).unwrap();
+
+            // Check auction is live
+            ensure!(
+                matches!(auction_data.auction_status, AuctionStatus::Alive),
+                Error::<T>::AuctionIsOver
+            );
+
+            // add new bid
+            let new_bid = Bid::<T::AccountId> {
+                bidder: buyer.clone(),
+                bid,
+            };
+
+            // check if bid is highest bid and add to top of auction bids
+            if new_bid.bid > auction_data.clone().bids.first().unwrap().bid {
+                auction_data.bids.insert(0, new_bid);
+            }
+
+            // get selller's auctiona from lookup
+            let mut auctions_of_seller = AuctionLookup::<T>::get(seller_id.clone()).unwrap();
+
+            // check corresponding auction in lookup for seller and update auction data
+            for (index, auction) in auctions_of_seller.auctions.clone().into_iter().enumerate() {
+                // get matching auction(s)
+                if auction.memo == auction_memo {
+                    auctions_of_seller
+                        .auctions
+                        .insert(index, auction_data.clone());
+                }
+
+                // update runtime storage
+                AuctionLookup::<T>::insert(
+                    &seller_id,
+                    AuctionsOf {
+                        party: Some(buyer.clone()),
+                        party_type: PartyType::Seller,
+                        auctions: auctions_of_seller.auctions.clone(),
+                    },
+                )
+            }
+
+            // Get auctions of buyer
+            let mut auctions_of_buyer = AuctionLookup::<T>::get(buyer.clone()).unwrap_or_default();
+
+            // remove least current auction from lookup auctions if length > 10
+            if auctions_of_buyer.auctions.len() > 10 {
+                auctions_of_buyer.auctions.pop();
+            }
+
+            // update buyers lookup auctions
+            auctions_of_buyer.auctions.push(auction_data.clone());
+
+            // Add buyer's auctions to lookup map runtime storage
+            let auctions_of_buyer = AuctionsOf {
+                party: Some(buyer.clone()),
+                party_type: PartyType::Buyer,
+                auctions: auctions_of_buyer.auctions,
+            };
+            AuctionLookup::<T>::insert(&buyer, auctions_of_buyer);
+
+            // update auction in runtime storage
+            Auctions::<T>::insert(&auction_hash, auction_data.clone());
+
+            // Emit an event that the bid was created.
+            Self::deposit_event(Event::AuctionBidAdded {
+                seller: seller_id.clone(),
+                energy_quantity: auction_data.quantity,
+                memo: auction_memo,
+                bidder: buyer,
+                bid,
+            });
+
             Ok(())
         }
     }
