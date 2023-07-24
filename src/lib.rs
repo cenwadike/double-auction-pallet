@@ -257,8 +257,6 @@ pub mod pallet {
 
         AuctionIsOver,
 
-        UnAuthorizedCall,
-
         InsuffficientAttachedDeposit,
     }
 
@@ -267,6 +265,11 @@ pub mod pallet {
     //////////////////
     #[pallet::hooks]
     impl<T: Config> Hooks<T::BlockNumber> for Pallet<T> {
+        fn on_initialize(_now: T::BlockNumber) -> Weight {
+            // T::WeightInfo::on_finalize(AuctionsExecutionQueue::<T>::iter_prefix(now).count() as u32)
+            100_000_000.into()
+        }
+
         fn on_finalize(now: T::BlockNumber) {
             // get auction ready for execution
             for (auction_id, _) in AuctionsExecutionQueue::<T>::drain_prefix(now) {
