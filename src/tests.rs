@@ -1,33 +1,69 @@
+#[allow(unused_imports)]
 use crate::{mock::*, Error, Event};
-use frame_support::{assert_noop, assert_ok};
+// use frame_support::{assert_noop, assert_ok};
 
 #[test]
-fn it_works_for_default_value() {
+fn create_new_auction_should_work() {
     new_test_ext().execute_with(|| {
-        // Go past genesis block so events get deposited
-        System::set_block_number(1);
-        // Dispatch a signed extrinsic.
-        // assert_ok!(TemplateModule::do_something(RuntimeOrigin::signed(1), 42));
-        // // Read pallet storage and assert an expected result.
-        // assert_eq!(TemplateModule::something(), Some(42));
-        // // Assert that the correct event was deposited
-        // System::assert_last_event(
-        //     Event::SomethingStored {
-        //         something: 42,
-        //         who: 1,
-        //     }
-        //     .into(),
-        // );
+        // initialize new auction params
+
+        // dispatch signed extrinsic
+
+        // assert that auction was added to auctions
+
+        // assert that auction was added for user
+
+        // assert that auction is in auction queue
+
+        // assert that correct event was emitted
     });
 }
 
 #[test]
-fn correct_error_for_none_value() {
+fn bid_should_work() {
     new_test_ext().execute_with(|| {
-        // Ensure the expected error is thrown when no value is present.
-        // assert_noop!(
-        //     TemplateModule::cause_error(RuntimeOrigin::signed(1)),
-        //     Error::<Test>::NoneValue
-        // );
+        // dispatch new auction extrinsic
+
+        // initialize bid params
+
+        // dispatch signed extrinsic for bid
+
+        // assert that bid was added to the auction
+
+        // assert that bid was added for buyer and seller
+
+        // assert that correct event was emitted
+    });
+}
+
+#[test]
+fn cancel_auction_should_work() {
+    new_test_ext().execute_with(|| {
+        // dispatch new auction extrinsic
+
+        // initialize cancel auction params
+
+        // dispatch signed extrinsic for cancel auction
+
+        // assert that auction was removed from auctions
+
+        // assert that auction was removed from user
+
+        // assert that auction is not in auction queue
+
+        // assert that correct event was emitted
+    });
+}
+
+#[test]
+fn on_auction_ended_should_work() {
+    new_test_ext().execute_with(|| {
+        // dispatch new auction extrinsic
+
+        // fast forward block production to auction end block height
+
+        // assert that auction is not in auction queue
+
+        // assert that correct event was emitted
     });
 }

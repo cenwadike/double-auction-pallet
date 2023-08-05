@@ -171,6 +171,7 @@ pub mod pallet {
 
     /// Stores on-going and future auctions of participants
     /// Maximum of 5 auction cachesd at a time
+    // TODO: use BoundedVec
     #[pallet::storage]
     #[pallet::getter(fn auctions_of)]
     pub(super) type AuctionsOf<T: Config> = StorageMap<
@@ -198,6 +199,52 @@ pub mod pallet {
     #[pallet::getter(fn auction_end_time)]
     pub(super) type AuctionsExecutionQueue<T: Config> =
         StorageDoubleMap<_, Twox64Concat, T::BlockNumber, Blake2_128Concat, u64, (), OptionQuery>;
+
+    /////////////////////
+    // Genesis config //
+    ////////////////////
+
+    #[pallet::genesis_config]
+    pub struct GenesisConfig {
+        pub auction_index: u64,
+    }
+
+    #[cfg(feature = "std")]
+    impl Default for GenesisConfig {
+        fn default() -> Self {
+            Self {
+                auction_index: 0u64,
+            }
+        }
+    }
+
+    #[pallet::genesis_build]
+    impl<T: Config> GenesisBuild<T> for GenesisConfig {
+        fn build(&self) {
+            <AuctionIndex<T>>::put(&self.auction_index);
+        }
+    }
+
+    ///////////////////
+    // Pallet hooks //
+    //////////////////
+    #[pallet::hooks]
+    impl<T: Config> Hooks<T::BlockNumber> for Pallet<T> {
+        fn on_initialize(_now: T::BlockNumber) -> Weight {
+            // T::WeightInfo::on_finalize(AuctionsExecutionQueue::<T>::iter_prefix(now).count() as u32)
+            100_000_000.into()
+        }
+
+        fn on_finalize(now: T::BlockNumber) {
+            // get auction ready for execution
+            for (auction_id, _) in AuctionsExecutionQueue::<T>::drain_prefix(now) {
+                if let Some(auction) = Auctions::<T>::take(auction_id) {
+                    // handle auction execution
+                    Self::on_auction_ended(auction.auction_id);
+                }
+            }
+        }
+    }
 
     //////////////////////
     // Runtime events  //
@@ -260,27 +307,6 @@ pub mod pallet {
         InsuffficientAttachedDeposit,
     }
 
-    ///////////////////
-    // Pallet hooks //
-    //////////////////
-    #[pallet::hooks]
-    impl<T: Config> Hooks<T::BlockNumber> for Pallet<T> {
-        fn on_initialize(_now: T::BlockNumber) -> Weight {
-            // T::WeightInfo::on_finalize(AuctionsExecutionQueue::<T>::iter_prefix(now).count() as u32)
-            100_000_000.into()
-        }
-
-        fn on_finalize(now: T::BlockNumber) {
-            // get auction ready for execution
-            for (auction_id, _) in AuctionsExecutionQueue::<T>::drain_prefix(now) {
-                if let Some(auction) = Auctions::<T>::take(auction_id) {
-                    // handle auction execution
-                    Self::on_auction_ended(auction.auction_id);
-                }
-            }
-        }
-    }
-
     ///////////////////////////
     // Pallet extrinsics    //
     //////////////////////////
@@ -298,7 +324,7 @@ pub mod pallet {
             let seller = ensure_signed(origin)?;
 
             // get current_auction_id
-            let current_auction_id = AuctionIndex::<T>::get().unwrap_or(1);
+            let current_auction_id = AuctionIndex::<T>::get().unwrap();
 
             // Calculate auction period
             // convert minutes to seconds and
