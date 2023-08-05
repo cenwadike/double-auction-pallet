@@ -2,7 +2,7 @@
 
 ## Overview
 
-This module provides a basic implement for order-book style on-chain double auctioning.
+This module provides implementation for on-chain double auctioning.
 
 This is the matching layer of a decentralized marketplace for electrical energy.
 Sellers are categorized based on how much electricity they intend to sell.
