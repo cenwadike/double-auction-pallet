@@ -39,7 +39,8 @@
 //! `Hooks`:
 //!     -- on_auction_ended
 //!
-//! `RPC`: Data RPCs
+//! `RPC`:
+//!
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -203,24 +204,27 @@ pub mod pallet {
     /////////////////////
     // Genesis config //
     ////////////////////
-
+    // define pallet's genesis configuration
     #[pallet::genesis_config]
     pub struct GenesisConfig {
         pub auction_index: u64,
     }
 
+    // assign default value for storage items
     #[cfg(feature = "std")]
     impl Default for GenesisConfig {
         fn default() -> Self {
             Self {
-                auction_index: 0u64,
+                auction_index: Default::default(),
             }
         }
     }
 
+    // assign custom values at genesis block
     #[pallet::genesis_build]
     impl<T: Config> GenesisBuild<T> for GenesisConfig {
         fn build(&self) {
+            // custom values are added here at the genesis block
             <AuctionIndex<T>>::put(&self.auction_index);
         }
     }
