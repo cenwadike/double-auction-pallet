@@ -88,8 +88,8 @@ pub mod pallet {
     // Buyers bid
     #[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
     pub struct Bid<AccountId> {
-        bidder: AccountId,
-        bid: u128,
+        pub bidder: AccountId,
+        pub bid: u128,
     }
 
     // Status of an auction, live auctions accepts bids
@@ -190,16 +190,24 @@ pub mod pallet {
     pub(super) type Auctions<T: Config> = StorageMap<
         _,
         Twox64Concat,
-        u64, //
+        u64, // auction id
         AuctionData<T::AccountId, T::BlockNumber, Bid<T::AccountId>, Tier>,
         OptionQuery,
     >;
 
     /// Index auctions by end time.
+    // map auction execution block number and auction id to auction
     #[pallet::storage]
     #[pallet::getter(fn auction_end_time)]
-    pub(super) type AuctionsExecutionQueue<T: Config> =
-        StorageDoubleMap<_, Twox64Concat, T::BlockNumber, Blake2_128Concat, u64, (), OptionQuery>;
+    pub(super) type AuctionsExecutionQueue<T: Config> = StorageDoubleMap<
+        _,
+        Twox64Concat,
+        T::BlockNumber,
+        Blake2_128Concat,
+        u64,
+        AuctionData<T::AccountId, T::BlockNumber, Bid<T::AccountId>, Tier>,
+        OptionQuery,
+    >;
 
     /////////////////////
     // Genesis config //
@@ -318,7 +326,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         #[pallet::call_index(0)]
         #[pallet::weight(100_000_000)]
-        pub fn new_auction(
+        pub fn new(
             origin: OriginFor<T>,
             energy_quantity: u128, // in KWH
             starting_price: u128,  // in parachain native token
@@ -328,7 +336,7 @@ pub mod pallet {
             let seller = ensure_signed(origin)?;
 
             // get current_auction_id
-            let current_auction_id = AuctionIndex::<T>::get().unwrap();
+            let current_auction_id = AuctionIndex::<T>::get().unwrap_or_default();
 
             // Calculate auction period
             // convert minutes to seconds and
@@ -393,7 +401,11 @@ pub mod pallet {
             AuctionsOf::<T>::insert(&seller, seller_auction_info);
 
             // Add auction to execution queue
-            AuctionsExecutionQueue::<T>::insert(auction_data.end_at, auction_data.auction_id, ());
+            AuctionsExecutionQueue::<T>::insert(
+                auction_data.end_at,
+                auction_data.auction_id,
+                auction_data.clone(),
+            );
 
             // Store globalauction to storage
             Auctions::<T>::insert(&auction_data.auction_id, auction_data.clone());
@@ -617,7 +629,7 @@ pub mod pallet {
                 matched_at: now,
             });
 
-            // -------------Some logic can be added here
+            // -------------Payment logic to be added here
 
             // emit evnt that auction has be executed
             Self::deposit_event(Event::AuctionExecuted {
