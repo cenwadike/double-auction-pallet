@@ -19,20 +19,30 @@
 //! NOTE: this mocdule does not implement how payment is handled.
 //!
 //! `Data`:     
-//!     --  AuctionData {
-//!             seller_id: AccountId,
-//!             quantity: u128,
-//!             starting_bid: u128,
-//!             buyers: [], // sorted array of bidders according to bid. Highest bidder at the top of the array.
-//!             auction_period: Blockheight,
-//!             start_at: Blockheight,
-//!             ended_at: Blockheight,
+//!     --  AuctionData<AccountId, BlockNumber, Bid, Tier> {
+//!             pub auction_id: u64,
+//!             pub seller_id: AccountId,
+//!             pub quantity: u128,
+//!             pub starting_bid: Bid,
+//!             pub bids: Vec<Bid>,
+//!             pub auction_period: BlockNumber,
+//!             pub auction_status: AuctionStatus,
+//!             pub start_at: BlockNumber,
+//!             pub end_at: BlockNumber,
+//!             pub highest_bid: Bid,
+//!             pub auction_category: Tier,
+//!         }
+//!     -- AuctionInfo<AccountId, BlockNumber, Bid, Tier, PartyType> {
+//!             pub participant_id: Option<AccountId>,
+//!             pub party_type: PartyType,
+//!             pub auctions: Vec<AuctionData<AccountId, BlockNumber, Bid, Tier>>, // Maximum length of 5
 //!         }
 //!     -- Tier: u128,  // 0, 1, 2, ...
-//!     -- Auctions {map(hash(AuctionData + Salt)) -> (AuctionData, AuctionCategory, Tier)}
+//!     -- Auctions { auction_id -> AuctionData }
+//!     -- AuctionsOf { account_id -> AuctionInfo }
 //!
 //! `Interface`:
-//!     -- new_auction(...)
+//!     -- new(...)
 //!     -- bid(...)
 //!     -- cancel(...)
 //!

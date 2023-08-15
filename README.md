@@ -20,49 +20,75 @@ NOTE: this mocdule does not implement how payment is handled.
 
 - Data relevant to an auction
 ```rust
-     AuctionData {
-        seller_id: AccountId,
-        quantity: u128,
-        starting_bid: u128,
-        buyers: [], // Highest bidder at the top of the array.
-        auction_period: Blockheight,
-        start_at: Blockheight,
-        ended_at: Blockheight,
+    pub struct AuctionData<AccountId, BlockNumber, Bid, Tier> {
+        pub auction_id: u64,
+        pub seller_id: AccountId,
+        pub quantity: u128,
+        pub starting_bid: Bid,
+        pub bids: Vec<Bid>,
+        pub auction_period: BlockNumber,
+        pub auction_status: AuctionStatus,
+        pub start_at: BlockNumber,
+        pub end_at: BlockNumber,
+        pub highest_bid: Bid,
+        pub auction_category: Tier,
+    }
+```
+
+- Infomation of a participant
+```rust
+    pub struct AuctionInfo<AccountId, BlockNumber, Bid, Tier, PartyType> {
+        pub participant_id: Option<AccountId>,
+        pub party_type: PartyType,
+        pub auctions: Vec<AuctionData<AccountId, BlockNumber, Bid, Tier>>, // Maximum length of 5
     }
 ```
 
 - All auctions
 ```rust
-    Auctions<T: Config> = StorageMap<
+    pub(super) type Auctions<T: Config> = StorageMap<
         _,
         Twox64Concat,
-        T::Hash,
+        u64, // auction id
         AuctionData<T::AccountId, T::BlockNumber, Bid<T::AccountId>, Tier>,
         OptionQuery,
     >
 ```
 
-- Auction related to an origin 
+- Auction related to an account id 
 ```rust
-    AuctionLookup<T: Config> = StorageMap<
+    pub(super) type AuctionsOf<T: Config> = StorageMap<
         _,
         Twox64Concat,
         T::AccountId,
-        AuctionsOf<T::AccountId, T::BlockNumber, Bid<T::AccountId>, Tier, PartyType>,
+        AuctionInfo<T::AccountId, T::BlockNumber, Bid<T::AccountId>, Tier, PartyType>,
+        OptionQuery,
+    >
+```
+
+- Auction execution queue
+```rust
+    pub(super) type AuctionsExecutionQueue<T: Config> = StorageDoubleMap<
+        _,
+        Twox64Concat,
+        T::BlockNumber,
+        Blake2_128Concat,
+        u64,
+        AuctionData<T::AccountId, T::BlockNumber, Bid<T::AccountId>, Tier>,
         OptionQuery,
     >
 ```
 
 ### `Interface:`
-- create_auction(...)
-- bid_auction(...)
-- cancel_auction(...)
+- new(...) [x]
+- bid(...) [ ]
+- cancel(...) []
 
 ### `Hooks:`
-    -- on_auctions_created
-    -- on_auction_destroyed
-    -- on_bid_auction
-    -- on_auction_over
+- on_auctions_created [ ]
+- on_auction_destroyed [ ]
+- on_bid_auction   [ ]
+- on_auction_ended [x]
 
 ### `RPC:` 
 - Data RPCs
