@@ -80,15 +80,15 @@ NOTE: this mocdule does not implement how payment is handled.
 ```
 
 ### `Interface:`
-- new(...) [x]
-- bid(...) [ ]
-- cancel(...) []
+- new(...) &#9745;
+- bid(...) &#9745;
+- cancel(...) &#9745;
 
 ### `Hooks:`
-- on_auctions_created [ ]
-- on_auction_destroyed [ ]
-- on_bid_auction   [ ]
-- on_auction_ended [x]
+- on_auctions_created &#9744;
+- on_auction_destroyed &#9744;
+- on_bid_auction &#9744;
+- on_auction_ended &#9745;
 
 ### `RPC:` 
 - Data RPCs

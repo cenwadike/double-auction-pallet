@@ -155,15 +155,13 @@ pub mod pallet {
 
     // Auctions linked to an auction participant
     #[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, TypeInfo)]
-    pub struct AuctionInfo<AccountId, BlockNumber, Bid, Tier, PartyType> {
+    pub struct AuctionInfo<AccountId, PartyType> {
         pub participant_id: Option<AccountId>,
         pub party_type: PartyType,
-        pub auctions: Vec<AuctionData<AccountId, BlockNumber, Bid, Tier>>, // Maximum length of 5
+        pub auctions: Vec<u64>, // Maximum of 5 auction id
     }
 
-    impl<AccountId, BlockNumber> Default
-        for AuctionInfo<AccountId, BlockNumber, Bid<AccountId>, Tier, PartyType>
-    {
+    impl<AccountId> Default for AuctionInfo<AccountId, PartyType> {
         fn default() -> Self {
             AuctionInfo {
                 participant_id: None,
@@ -189,7 +187,7 @@ pub mod pallet {
         _,
         Twox64Concat,
         T::AccountId,
-        AuctionInfo<T::AccountId, T::BlockNumber, Bid<T::AccountId>, Tier, PartyType>,
+        AuctionInfo<T::AccountId, PartyType>,
         OptionQuery,
     >;
 
@@ -400,7 +398,7 @@ pub mod pallet {
             }
 
             // Update seller's auctions
-            seller_auction_info.auctions.push(auction_data.clone());
+            seller_auction_info.auctions.push(auction_data.auction_id);
 
             // Store seller's auction into storage
             seller_auction_info = AuctionInfo {
@@ -473,10 +471,13 @@ pub mod pallet {
                 .enumerate()
             {
                 // get matching auction(s)
-                if auction.auction_id == auction_id {
+                if auction_id == auction {
                     sellers_auction_info.auctions.remove(index);
                 }
             }
+
+            // update seller auction info
+            AuctionsOf::<T>::insert(auction_data.seller_id.clone(), sellers_auction_info);
 
             // Remove auction from execution queue
             AuctionsExecutionQueue::<T>::remove(auction_data.end_at, auction_data.auction_id);
@@ -538,9 +539,9 @@ pub mod pallet {
                         }
 
                         // get matching auction
-                        if auction.auction_id == auction_id {
+                        if auction == auction_id {
                             // insert new auction
-                            auction_info.auctions.insert(index, auction_data.clone());
+                            auction_info.auctions.insert(index, auction_data.auction_id);
 
                             // update runtime storage
                             AuctionsOf::<T>::insert(
@@ -561,7 +562,7 @@ pub mod pallet {
                         AuctionsOf::<T>::get(buyer_id.clone()).unwrap_or_default();
 
                     // Add auction to buyers information
-                    auction_info.auctions.push(auction_data.clone());
+                    auction_info.auctions.push(auction_data.auction_id);
 
                     // update runtime storage
                     AuctionsOf::<T>::insert(
@@ -587,11 +588,11 @@ pub mod pallet {
                 }
 
                 // get matching auction
-                if auction.auction_id == auction_id {
+                if auction == auction_id {
                     // insert new auction
                     seller_auction_info
                         .auctions
-                        .insert(index, auction_data.clone());
+                        .insert(index, auction_data.auction_id);
 
                     // update runtime storage
                     AuctionsOf::<T>::insert(
