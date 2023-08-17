@@ -2,19 +2,19 @@
 
 ## Overview
 
-This module provides implementation for on-chain double auctioning.
+This module provides an implementation for on-chain double auctioning.
 
 This is the matching layer of a decentralized marketplace for electrical energy.
 Sellers are categorized based on how much electricity they intend to sell.
 Buyers are also categorized based on how much electricity they intend to buy.
 
-The highest bidding buyer in the same category with a seller is matched
+The highest bidding buyer in the same category as a seller is matched
 when the auction period of a seller is over.
 
 The seller has the benefit of getting the best price at a given point in time for their category,
 while the buyer can choose a margin of safety for every buy.
 
-NOTE: this mocdule does not implement how payment is handled.
+NOTE: This module does not implement how payment is handled.
 
 ### `Data`:  
 
@@ -35,7 +35,7 @@ NOTE: this mocdule does not implement how payment is handled.
     }
 ```
 
-- Infomation of a participant
+- Information of a participant
 ```rust
     pub struct AuctionInfo<AccountId, BlockNumber, Bid, Tier, PartyType> {
         pub participant_id: Option<AccountId>,
@@ -94,4 +94,5 @@ NOTE: this mocdule does not implement how payment is handled.
 - Data RPCs
 
 
-Trait `AuctionHandler` is been used to validate the bid and when the auction ends `AuctionHandle::on_auction_ended(id, bid)` gets called.
+### `Traits` 
+`AuctionHandler` is been used to validate the bid and when the auction ends `AuctionHandle::on_auction_ended(id, bid)` gets called.
