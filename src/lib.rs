@@ -37,6 +37,7 @@
 //!             pub party_type: PartyType,
 //!             pub auctions: Vec<AuctionData<AccountId, BlockNumber, Bid, Tier>>, // Maximum length of 5
 //!         }
+//!     -- AuctionsExecutionQueue: { (execution_block, auction_id) -> () }
 //!     -- Tier: u128,  // 0, 1, 2, ...
 //!     -- Auctions { auction_id -> AuctionData }
 //!     -- AuctionsOf { account_id -> AuctionInfo }
@@ -206,16 +207,9 @@ pub mod pallet {
     /// Index auctions by end time.
     // map auction execution block number and auction id to auction
     #[pallet::storage]
-    #[pallet::getter(fn auction_end_time)]
-    pub(super) type AuctionsExecutionQueue<T: Config> = StorageDoubleMap<
-        _,
-        Twox64Concat,
-        T::BlockNumber,
-        Blake2_128Concat,
-        u64,
-        AuctionData<T::AccountId, T::BlockNumber, Bid<T::AccountId>, Tier>,
-        OptionQuery,
-    >;
+    #[pallet::getter(fn auction_execution_queue)]
+    pub(super) type AuctionsExecutionQueue<T: Config> =
+        StorageDoubleMap<_, Twox64Concat, T::BlockNumber, Blake2_128Concat, u64, (), OptionQuery>;
 
     /////////////////////
     // Genesis config //
@@ -398,7 +392,9 @@ pub mod pallet {
             }
 
             // Update seller's auctions
-            seller_auction_info.auctions.push(auction_data.auction_id);
+            seller_auction_info
+                .auctions
+                .insert(0, auction_data.auction_id);
 
             // Store seller's auction into storage
             seller_auction_info = AuctionInfo {
@@ -409,11 +405,7 @@ pub mod pallet {
             AuctionsOf::<T>::insert(&seller, seller_auction_info);
 
             // Add auction to execution queue
-            AuctionsExecutionQueue::<T>::insert(
-                auction_data.end_at,
-                auction_data.auction_id,
-                auction_data.clone(),
-            );
+            AuctionsExecutionQueue::<T>::insert(auction_data.end_at, auction_data.auction_id, ());
 
             // Store globalauction to storage
             Auctions::<T>::insert(&auction_data.auction_id, auction_data.clone());
@@ -562,7 +554,7 @@ pub mod pallet {
                         AuctionsOf::<T>::get(buyer_id.clone()).unwrap_or_default();
 
                     // Add auction to buyers information
-                    auction_info.auctions.push(auction_data.auction_id);
+                    auction_info.auctions.insert(0, auction_data.auction_id);
 
                     // update runtime storage
                     AuctionsOf::<T>::insert(

@@ -51,12 +51,9 @@ fn create_new_auction_should_work() {
         );
 
         // assert that auction is in auction queue
-        let auction_execution_queue =
-            DoubleAuctionModule::auction_end_time(execution_block, auction.auction_id).unwrap();
-
-        assert_eq!(
-            auction_execution_queue.seller_id,
-            AccountId32::from(b"000000000000000000000ALICE000000".clone())
+        assert!(
+            DoubleAuctionModule::auction_execution_queue(execution_block, auction.auction_id)
+                .is_some()
         );
 
         // assert that correct event was emitted
@@ -119,7 +116,8 @@ fn cancel_auction_should_work() {
 
         // assert that auction is not in auction queue
         assert!(
-            DoubleAuctionModule::auction_end_time(execution_block, auction.auction_id).is_none()
+            DoubleAuctionModule::auction_execution_queue(execution_block, auction.auction_id)
+                .is_none()
         );
 
         // assert that correct event was emitted
