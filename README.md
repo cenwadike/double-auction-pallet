@@ -74,7 +74,7 @@ NOTE: this mocdule does not implement how payment is handled.
         T::BlockNumber,
         Blake2_128Concat,
         u64,
-        AuctionData<T::AccountId, T::BlockNumber, Bid<T::AccountId>, Tier>,
+        (),
         OptionQuery,
     >
 ```
