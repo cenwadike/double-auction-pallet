@@ -32,10 +32,10 @@
 //!             pub highest_bid: Bid,
 //!             pub auction_category: Tier,
 //!         }
-//!     -- AuctionInfo<AccountId, BlockNumber, Bid, Tier, PartyType> {
+//!     -- AuctionInfoo<AccountId, PartyType> {
 //!             pub participant_id: Option<AccountId>,
 //!             pub party_type: PartyType,
-//!             pub auctions: Vec<AuctionData<AccountId, BlockNumber, Bid, Tier>>, // Maximum length of 5
+//!             pub auctions: Vec<u64>, // Maximum of 5 auction id
 //!         }
 //!     -- AuctionsExecutionQueue: { (execution_block, auction_id) -> () }
 //!     -- Tier: u128,  // 0, 1, 2, ...
@@ -55,9 +55,6 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-/// Edit this file to define custom logic or remove it if it is not needed.
-/// Learn more about FRAME and the core library of Substrate FRAME pallets:
-/// <https://docs.substrate.io/reference/frame-pallets/>
 pub use pallet::*;
 
 #[cfg(test)]
@@ -261,6 +258,10 @@ pub mod pallet {
     }
 
     //////////////////////
+    // Pallet instance //
+    /////////////////////
+
+    //////////////////////
     // Runtime events  //
     /////////////////////
     // runtime event for important runtime actions
@@ -392,6 +393,7 @@ pub mod pallet {
             }
 
             // Update seller's auctions
+            // add this auction as latest seller's auction
             seller_auction_info
                 .auctions
                 .insert(0, auction_data.auction_id);
@@ -541,7 +543,7 @@ pub mod pallet {
                                 AuctionInfo {
                                     participant_id: Some(buyer_id.clone()),
                                     party_type: PartyType::Seller,
-                                    auctions: auction_info.auctions.clone(),
+                                    auctions: (*auction_info.auctions).to_vec(),
                                 },
                             )
                         }
