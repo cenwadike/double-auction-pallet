@@ -86,7 +86,7 @@ NOTE: This module does not implement how payment is handled.
 
 ### `Hooks:`
 - on_auctions_created &#9744;
-- on_auction_destroyed &#9744;
+- on_auction_cancelled &#9744;
 - on_bid_auction &#9744;
 - on_auction_ended &#9745;
 
