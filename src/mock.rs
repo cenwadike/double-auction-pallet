@@ -63,6 +63,9 @@ impl frame_system::Config for Test {
 impl pallet_double_auction::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     // type WeightInfo = ()
+    type AuctionId = u64;
+    type Quantity = u128;
+    type Price = u128;
 }
 
 // Build genesis storage according to the mock runtime.
