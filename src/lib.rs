@@ -313,7 +313,7 @@ pub mod pallet {
         fn on_finalize(now: BlockNumberFor<T>) {
             // get auction ready for execution
             for (auction_id, _) in AuctionsExecutionQueue::<T, I>::drain_prefix(now) {
-                if let Some(auction) = Auctions::<T, I>::take(auction_id) {
+                if let Some(auction) = Auctions::<T, I>::get(auction_id) {
                     // handle auction execution
                     Self::on_auction_ended(auction.auction_id);
                 }
@@ -434,7 +434,7 @@ pub mod pallet {
                 seller_id: seller.clone(),
                 quantity: T::Quantity::from(energy_quantity),
                 starting_bid: starting_bid.clone(),
-                bids: vec![],
+                bids: vec![starting_bid.clone()],
                 auction_period: auction_period_in_block_number,
                 auction_status: AuctionStatus::default(),
                 start_at: starting_block_number,
@@ -580,6 +580,8 @@ pub mod pallet {
             if new_bid.bid > auction_data.bids.first().unwrap().bid {
                 // add to top of auction bids
                 auction_data.bids.insert(0, new_bid.clone());
+                auction_data.highest_bid = new_bid.clone();
+                Auctions::<T, I>::insert(auction_data.auction_id, auction_data.clone());
             }
 
             // get buyer's auction information
@@ -687,7 +689,7 @@ pub mod pallet {
     impl<T: Config<I>, I: 'static> Pallet<T, I> {
         fn on_auction_ended(auction_id: T::AuctionId) {
             // Get auction data
-            let auction_data = Auctions::<T, I>::get(auction_id).unwrap();
+            let auction_data = Auctions::<T, I>::take(auction_id).unwrap();
             let now = <frame_system::Pallet<T>>::block_number();
 
             // emit event that auction is matched
