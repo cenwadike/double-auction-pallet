@@ -222,7 +222,7 @@ pub mod pallet {
     pub(super) type AuctionIndex<T: Config<I>, I: 'static = ()> = StorageValue<_, T::AuctionId>;
 
     /// Stores on-going and future auctions of participants
-    /// Maximum of 5 auction cachesd at a time
+    /// Maximum of 5 auction cached at a time
     // TODO: use BoundedVec
     #[pallet::storage]
     #[pallet::getter(fn auctions_of)]
@@ -399,7 +399,7 @@ pub mod pallet {
             let seller = ensure_signed(origin)?;
 
             // get current_auction_id
-            let current_auction_id = AuctionIndex::<T, I>::get().unwrap();
+            let current_auction_id = AuctionIndex::<T, I>::get().unwrap_or_default();
 
             // Calculate auction period
             // convert minutes to seconds and
@@ -524,18 +524,16 @@ pub mod pallet {
             let mut sellers_auction_info =
                 AuctionsOf::<T, I>::get(auction_data.seller_id.clone()).unwrap();
 
-            // Remove auction from seller's auctions
-            for (index, auction) in sellers_auction_info
+            // get matching auction(s)
+            let index = sellers_auction_info
                 .auctions
-                .clone()
-                .into_iter()
-                .enumerate()
-            {
-                // get matching auction(s)
-                if auction.auction_id == auction_id {
-                    sellers_auction_info.auctions.remove(index);
-                }
-            }
+                .iter()
+                .position(|x| x.auction_id.clone() == auction_id)
+                .unwrap();
+
+            // Remove auction from seller's auctions
+            sellers_auction_info.auctions.remove(index);
+            AuctionsOf::<T, I>::insert(auction_data.seller_id.clone(), sellers_auction_info);
 
             // Remove auction from execution queue
             AuctionsExecutionQueue::<T, I>::remove(auction_data.end_at, auction_data.auction_id);

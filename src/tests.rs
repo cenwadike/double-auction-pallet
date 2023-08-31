@@ -114,6 +114,17 @@ fn cancel_auction_should_work() {
             .is_none()
         );
 
+        // println!(
+        //     "{:?}",
+        //     DoubleAuctionModule::auctions_of(AccountId::from(AccountId32::from(
+        //         b"000000000000000000000ALICE000000".clone(),
+        //     )))
+        //     .unwrap()
+        //     .auctions
+        //     .get(auction.auction_id as usize)
+        //     .unwrap()
+        // );
+
         // assert that auction is not in auction queue
         assert!(
             DoubleAuctionModule::auction_execution_queue(execution_block, auction.auction_id)
