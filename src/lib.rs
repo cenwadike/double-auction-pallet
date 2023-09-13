@@ -506,7 +506,7 @@ pub mod pallet {
             );
 
             // Get auction from global auction
-            let mut auction_data = Auctions::<T, I>::get(auction_id).unwrap();
+            let mut auction_data = Auctions::<T, I>::get(auction_id).expect("data of auction");
 
             // Check auction is live
             ensure!(
@@ -522,14 +522,14 @@ pub mod pallet {
 
             // Get seller's auction info
             let mut sellers_auction_info =
-                AuctionsOf::<T, I>::get(auction_data.seller_id.clone()).unwrap();
+                AuctionsOf::<T, I>::get(auction_data.seller_id.clone()).expect("info of seller");
 
             // get matching auction(s)
             let index = sellers_auction_info
                 .auctions
                 .iter()
                 .position(|x| x.auction_id.clone() == auction_id)
-                .unwrap();
+                .expect("index of auction");
 
             // Remove auction from seller's auctions
             sellers_auction_info.auctions.remove(index);
@@ -562,7 +562,7 @@ pub mod pallet {
             );
 
             // Get auction from global auction
-            let mut auction_data = Auctions::<T, I>::get(auction_id).unwrap();
+            let mut auction_data = Auctions::<T, I>::get(auction_id).expect("data of auction");
 
             // Check auction is live
             ensure!(
@@ -577,7 +577,7 @@ pub mod pallet {
             };
 
             // check if bid is highest bid
-            if new_bid.bid > auction_data.bids.first().unwrap().bid {
+            if new_bid.bid > auction_data.bids[0].bid {
                 // add to top of auction bids
                 auction_data.bids.insert(0, new_bid.clone());
                 auction_data.highest_bid = new_bid.clone();
@@ -640,7 +640,7 @@ pub mod pallet {
 
             // Get seller's auction information
             let mut seller_auction_info =
-                AuctionsOf::<T, I>::get(auction_data.clone().seller_id).unwrap();
+                AuctionsOf::<T, I>::get(auction_data.clone().seller_id).expect("info of seller");
 
             // Update seller's auction information
             for (index, auction) in seller_auction_info.auctions.clone().into_iter().enumerate() {
@@ -702,7 +702,7 @@ pub mod pallet {
                 matched_at: now,
             });
 
-            // -------------Some logic can be added here
+            // -------------More logic can be added here
 
             // emit evnt that auction has be executed
             Self::deposit_event(Event::AuctionExecuted {
